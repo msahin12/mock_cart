@@ -45,6 +45,7 @@ export default function ShoppingCart() {
         { id: 2, name: "Smart Watch", price: 200, quantity: 1 },
     ]);
 
+
     const updateQuantity = (id, newQuantity) => {
         if (newQuantity < 1) return;
         setCartItems(prev =>
@@ -66,8 +67,28 @@ export default function ShoppingCart() {
             return;
         }
 
+        if (method === "TMU") {
+            if (window.TMUPayment) {
+                window.TMUPayment.open({
+                    amount: total,
+                    onSuccess: (result) => {
+                        alert(`Payment successful! Transaction ID: ${result.transactionId}`);
+                        console.log('Payment result:', result);
+                    },
+                    onCancel: () => {
+                        console.log('Payment cancelled');
+                    },
+                    onError: (error) => {
+                        alert(`Payment failed: ${error}`);
+                    }
+                });
+            } else {
+                alert('TMU Payment system not available');
+            }
+            return;
+        }
+
         alert(`Processing ${method} payment for $${total.toFixed(2)}`);
-        // Here you would typically integrate with a payment processor
         console.log(`Payment method: ${method}, Total: $${total.toFixed(2)}`);
     };
 

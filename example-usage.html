@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TMU Payment - Usage Example</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .example-section {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        button {
+            background: #0d9488;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 10px 5px;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background: #0f766e;
+        }
+
+        .code-block {
+            background: #1f2937;
+            color: #e5e7eb;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>TMU Payment Popup - Standalone JavaScript Library</h1>
+
+    <p>This is a complete, standalone TMU payment popup that can be integrated into any website without any dependencies.</p>
+
+    <div class="example-section">
+        <h2>Live Demo</h2>
+        <p>Click the buttons below to see the TMU payment popup in action:</p>
+
+        <button onclick="openBasicPayment()">Basic Payment ($99.99)</button>
+        <button onclick="openAdvancedPayment()">Advanced Payment ($249.50)</button>
+        <button onclick="openCustomPayment()">Custom Amount</button>
+    </div>
+
+    <div class="example-section">
+        <h2>Basic Usage</h2>
+        <div class="code-block">
+            &lt;!-- Include the TMU Payment script --&gt;
+            &lt;script src="tmuPayment.js"&gt;&lt;/script&gt;
+
+            &lt;script&gt;
+            // Basic usage
+            TMUPayment.open({
+            amount: 99.99,
+            onSuccess: (result) =&gt; {
+            alert('Payment successful!');
+            console.log(result);
+            },
+            onCancel: () =&gt; {
+            console.log('Payment cancelled');
+            }
+            });
+            &lt;/script&gt;
+        </div>
+    </div>
+
+    <div class="example-section">
+        <h2>Advanced Usage</h2>
+        <div class="code-block">
+            TMUPayment.open({
+            amount: 249.50,
+            currency: 'USD',
+            onSuccess: (result) =&gt; {
+            console.log('Transaction ID:', result.transactionId);
+            // Redirect to success page
+            window.location.href = '/success';
+            },
+            onCancel: () =&gt; {
+            console.log('User cancelled payment');
+            },
+            onError: (error) =&gt; {
+            console.error('Payment failed:', error);
+            alert('Payment failed. Please try again.');
+            }
+            });
+        </div>
+    </div>
+
+    <div class="example-section">
+        <h2>Features</h2>
+        <ul>
+            <li>✅ No dependencies - Pure JavaScript</li>
+            <li>✅ TMU branded with official logo</li>
+            <li>✅ Professional form design</li>
+            <li>✅ Credit card and PayPal payment methods</li>
+            <li>✅ Form validation</li>
+            <li>✅ Mobile responsive</li>
+            <li>✅ Easy integration on any website</li>
+            <li>✅ Customizable callbacks</li>
+        </ul>
+    </div>
+
+    <!-- Include the TMU Payment script -->
+    <script src="src/tmuPayment.js"></script>
+
+    <script>
+        function openBasicPayment() {
+            TMUPayment.open({
+                amount: 99.99,
+                onSuccess: (result) => {
+                    alert(`Payment successful! Transaction ID: ${result.transactionId}`);
+                    console.log('Payment result:', result);
+                },
+                onCancel: () => {
+                    console.log('Payment cancelled by user');
+                }
+            });
+        }
+
+        function openAdvancedPayment() {
+            TMUPayment.open({
+                amount: 249.50,
+                currency: 'USD',
+                onSuccess: (result) => {
+                    alert(`Advanced payment successful!\nAmount: $${result.amount}\nTransaction: ${result.transactionId}`);
+                    console.log('Advanced payment result:', result);
+                },
+                onCancel: () => {
+                    console.log('Advanced payment cancelled');
+                },
+                onError: (error) => {
+                    alert(`Payment error: ${error}`);
+                    console.error('Payment error:', error);
+                }
+            });
+        }
+
+        function openCustomPayment() {
+            const amount = prompt('Enter payment amount:', '150.00');
+            if (amount && !isNaN(amount)) {
+                TMUPayment.open({
+                    amount: parseFloat(amount),
+                    onSuccess: (result) => {
+                        alert(`Custom payment of $${amount} successful!`);
+                        console.log('Custom payment result:', result);
+                    },
+                    onCancel: () => {
+                        console.log('Custom payment cancelled');
+                    }
+                });
+            }
+        }
+    </script>
+</body>
+
+</html>
