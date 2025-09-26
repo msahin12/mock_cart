@@ -18,6 +18,35 @@ window.TMUPayment = (function () {
     'use strict';
 
     let currentPopup = null;
+    let stripe = null;
+    let elements = null;
+    let cardElement = null;
+
+    function loadStripeJs(publishableKey) {
+        return new Promise((resolve, reject) => {
+            if (window.Stripe) {
+                try {
+                    const instance = window.Stripe(publishableKey);
+                    return resolve(instance);
+                } catch (e) {
+                    return reject(e);
+                }
+            }
+            const script = document.createElement('script');
+            script.src = 'https://js.stripe.com/v3/';
+            script.async = true;
+            script.onload = () => {
+                try {
+                    const instance = window.Stripe(publishableKey);
+                    resolve(instance);
+                } catch (e) {
+                    reject(e);
+                }
+            };
+            script.onerror = () => reject(new Error('Failed to load Stripe.js'));
+            document.head.appendChild(script);
+        });
+    }
 
     // Main API
     const TMUPayment = {
@@ -29,6 +58,9 @@ window.TMUPayment = (function () {
             const config = {
                 amount: options.amount || 0,
                 currency: options.currency || 'USD',
+                baseUrl: options.baseUrl || '',
+                stripePublicKey: options.stripePublicKey || 'pk_test_q373Go6r9vYhH3yk2njg5Vfu00nCBgtDPr',
+                headers: { ...(options.headers || {}), "AUTHORIZATION": "IntegrationToken eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImNiODBmZTdhLWY4YjctNGM4ZC1hYjc0LWRlNWMxMjQyZTQ4ZSIsInVzZXJfaWQiOiIyYjI0ZTIyNi1iZWVkLTQ2Y2QtOTA5MC1lZjlhYTc0YjExNWUifQ.kjkTsg-3Dsjl-wT8xYIPwdIFqPlGZakzefG-ibmAebB_k5HvxXTbGa7Iyfntl3Iu53SXaJ44feeLbxk83HhvEwOJA1FwDSwNsCJLMH0TLN2GKN3tB4kwj5e6kDpFg1FiPnX_XpAhQtLzUTY3DHZCNFEa6MNQ4roLCfPUDQKZgNhfS95HCmSWn7Ty6YPngijhP_aA58i-QDRgVQ95cXnOGY8Mf07Lwo19zG08xT37FlI7-yh1yg0x8xwwqPqbeNTfNfZdDD-wS9XSsbOaK93UX1kf211WKU9PyPfFcEhY6ZtwdfBZwMDmgXpgaaVKkwVN4FRhs1c2ppU9vGcTBtkP2wNpQR2GG1Sw44q07pT4gDgRl3j4s1EdrK_cUQtT_bMOH3vsxeciwsA8mkUDWmCEiy0Iyl1A1uKOcSF6aZiZ7SAJPwDkxgWbx1Ee0RYFsA2Bp_VI5ooKzDTMNcLXYwopUfSj7ilriXDM1LAED7KTCB1TSbiF53lUIl829ukRPNfoHvOUjdLrlcBeTjcSdAsj8rfVob0izGTMZe8K-ZP1iuKzYnwKeGuzzOew7W_PxkbFSI_QQuC4LCBI-NLIXFcgGsNHDECdIMESRI0MH33pfuP7PsQnhlLJZk5fqF2lyS4P3Q8xxa0LJzgxEqp72HCeYifSRpRUzaYnKiSPgRi_LO0" },
                 onSuccess: options.onSuccess || function () { },
                 onCancel: options.onCancel || function () { },
                 onError: options.onError || function (error) { alert('Errore di pagamento: ' + error); }
@@ -131,7 +163,7 @@ window.TMUPayment = (function () {
             .tmu-popup-container {
                 background: white;
                 border-radius: 20px;
-                max-width: 480px;
+                max-width: 530px;
                 width: 100%;
                 max-height: 90vh;
                 overflow: hidden;
@@ -142,7 +174,7 @@ window.TMUPayment = (function () {
             
             .tmu-popup-header {
                 background: var(--tmu-gradient);
-                padding: 24px 32px;
+                padding: 24px;
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
@@ -507,7 +539,7 @@ window.TMUPayment = (function () {
                 color: var(--tmu-color);
             }
             
-            @media (max-width: 480px) {
+            @media (max-width: 530px) {
                 .tmu-popup-overlay {
                     padding: 16px;
                 }
@@ -623,24 +655,9 @@ window.TMUPayment = (function () {
                                 <svg class="tmu-popup-card-icon" fill="currentColor" viewBox="0 0 20 20">
                                     <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4zM18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z"/>
                                 </svg>
-                                <input type="text" name="cardNumber" placeholder="Numero di carta" class="tmu-popup-input tmu-popup-card-input" required>
+                                <div id="tmu-card-element" class="tmu-popup-input tmu-popup-card-input"></div>
                             </div>
-                            <div class="tmu-popup-error" data-error-for="cardNumber">Inserisci un numero di carta valido</div>
-                        </div>
-
-                        <div class="tmu-popup-field">
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                                <div>
-                                    <label class="tmu-popup-label">SCADENZA (MM/AA)*</label>
-                                    <input type="text" name="expiry" placeholder="MM/AA" class="tmu-popup-input" required>
-                                    <div class="tmu-popup-error" data-error-for="expiry">Inserisci una data valida</div>
-                                </div>
-                                <div>
-                                    <label class="tmu-popup-label">CVV*</label>
-                                    <input type="text" name="cvv" placeholder="CVV" class="tmu-popup-input" required>
-                                    <div class="tmu-popup-error" data-error-for="cvv">Inserisci un CVV valido</div>
-                                </div>
-                            </div>
+                            <div class="tmu-popup-error" data-error-for="card">Inserisci i dettagli della carta</div>
                         </div>
                     </div>
                     
@@ -668,6 +685,29 @@ window.TMUPayment = (function () {
         const form = popup.querySelector('.tmu-popup-form');
         const paymentMethods = popup.querySelectorAll('.tmu-popup-method');
         const cardFields = popup.querySelector('.tmu-popup-card-fields');
+        const submitBtn = popup.querySelector('.tmu-popup-button-submit');
+
+        async function setupStripeIfNeeded() {
+            try {
+                if (!config.stripePublicKey) return;
+                if (!stripe) {
+                    stripe = await loadStripeJs(config.stripePublicKey);
+                }
+                if (!elements) {
+                    elements = stripe.elements();
+                }
+                if (!cardElement) {
+                    const style = { base: { fontSize: '16px' } };
+                    cardElement = elements.create('card', { style });
+                    const mountPoint = popup.querySelector('#tmu-card-element');
+                    if (mountPoint && !mountPoint.hasChildNodes()) {
+                        cardElement.mount(mountPoint);
+                    }
+                }
+            } catch (e) {
+                // no-op; handled on submit
+            }
+        }
 
         closeBtn.addEventListener('click', () => {
             TMUPayment.close();
@@ -681,7 +721,7 @@ window.TMUPayment = (function () {
 
         // Payment method selection
         paymentMethods.forEach(method => {
-            method.addEventListener('click', () => {
+            method.addEventListener('click', async () => {
                 // Remove active class from all methods
                 paymentMethods.forEach(m => m.classList.remove('active'));
                 // Add active class to clicked method
@@ -690,11 +730,18 @@ window.TMUPayment = (function () {
                 // Show/hide card fields based on selection
                 if (method.dataset.method === 'card') {
                     cardFields.classList.remove('hidden');
+                    await setupStripeIfNeeded();
                 } else {
                     cardFields.classList.add('hidden');
                 }
             });
         });
+
+        // Mount Stripe card immediately if card is default selected
+        const defaultMethod = popup.querySelector('.tmu-popup-method.active');
+        if (defaultMethod && defaultMethod.dataset.method === 'card') {
+            setupStripeIfNeeded();
+        }
 
         function setError(name, message) {
             const err = popup.querySelector(`[data-error-for="${name}"]`);
@@ -722,13 +769,7 @@ window.TMUPayment = (function () {
             if (!popup.querySelector('#agreeToTerms').checked) { setError('agreeToTerms', "Devi accettare i Termini d'uso"); valid = false; }
             if (method === 'card') {
                 const holder = get('cardholderName').trim();
-                const number = get('cardNumber').replace(/\s+/g, '');
-                const expiry = get('expiry').trim();
-                const cvv = get('cvv').trim();
                 if (!holder) { setError('cardholderName', "Inserisci il nome dell'intestatario"); valid = false; }
-                if (!/^\d{13,19}$/.test(number)) { setError('cardNumber', 'Inserisci un numero di carta valido'); valid = false; }
-                if (!/^(0[1-9]|1[0-2])\/(\d{2})$/.test(expiry)) { setError('expiry', 'Inserisci una data valida (MM/AA)'); valid = false; }
-                if (!/^\d{3,4}$/.test(cvv)) { setError('cvv', 'Inserisci un CVV valido'); valid = false; }
             }
             return valid;
         }
@@ -736,30 +777,110 @@ window.TMUPayment = (function () {
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             if (!validateFields()) { return; }
+            submitBtn.disabled = true;
             const formData = new FormData(form);
             const selectedMethod = popup.querySelector('.tmu-popup-method.active').dataset.method;
 
-            const paymentData = {
-                firstName: formData.get('firstName'),
-                lastName: formData.get('lastName'),
-                email: formData.get('email'),
-                paymentMethod: selectedMethod,
-                cardholderName: selectedMethod === 'card' ? formData.get('cardholderName') : '',
-                cardNumber: selectedMethod === 'card' ? (formData.get('cardNumber') || '').replace(/\s+/g, '') : '',
-                expiry: selectedMethod === 'card' ? formData.get('expiry') : '',
-                cvv: selectedMethod === 'card' ? formData.get('cvv') : '',
-                donateAnonymously: formData.get('donateAnonymously') === 'on',
-                agreeToTerms: formData.get('agreeToTerms') === 'on',
-                amount: config.amount,
-                currency: config.currency
-            };
-
             try {
-                const result = await TMUPayment.processPayment(paymentData);
+                if (selectedMethod !== 'card') {
+                    throw new Error('Metodo di pagamento non supportato in questo popup');
+                }
+
+                if (!config.stripePublicKey) {
+                    throw new Error('Chiave pubblicabile Stripe non configurata');
+                }
+
+                if (!stripe) {
+                    stripe = await loadStripeJs(config.stripePublicKey);
+                    elements = stripe.elements();
+                }
+
+                if (!cardElement) {
+                    const style = { base: { fontSize: '16px' } };
+                    cardElement = elements.create('card', { style });
+                    const mountPoint = popup.querySelector('#tmu-card-element');
+                    if (mountPoint) cardElement.mount(mountPoint);
+                }
+
+                const cardholderName = (formData.get('cardholderName') || '').toString().trim();
+                const email = (formData.get('email') || '').toString().trim();
+
+                const pmResult = await stripe.createPaymentMethod({
+                    type: 'card',
+                    card: cardElement,
+                    billing_details: { name: cardholderName, email }
+                });
+                if (pmResult.error) {
+                    throw new Error(pmResult.error.message || 'Errore creazione metodo di pagamento');
+                }
+
+                const paymentMethodId = pmResult.paymentMethod.id;
+
+                const fd = new FormData();
+                fd.append('stripe_payment_method_type', 'card');
+
+                const csResp = await fetch((config.baseUrl || '') + 'https://platform.alpha.trustmeup.com/api/integration/v1/donations/client-secret/', {
+                    method: 'POST',
+                    headers: { ...(config.headers || {}) },
+                    body: fd
+                });
+                if (!csResp.ok) {
+                    throw new Error('Errore creazione client secret');
+                }
+                const csJson = await csResp.json();
+                const clientSecret = csJson.client_secret || csJson.clientSecret || csJson?.data?.client_secret;
+                if (!clientSecret) {
+                    throw new Error('Client secret non disponibile');
+                }
+
+                const isSetupIntent = clientSecret.startsWith('seti_');
+                let confirmedPaymentMethodId = paymentMethodId;
+                if (!isSetupIntent) {
+                    const confirm = await stripe.confirmCardSetup(clientSecret, { payment_method: paymentMethodId });
+                    if (confirm.error) {
+                        throw new Error(confirm.error.message || 'Conferma setup fallita');
+                    }
+                    if (confirm.setupIntent && confirm.setupIntent.status === 'succeeded') {
+                        confirmedPaymentMethodId = confirm.setupIntent.payment_method || confirmedPaymentMethodId;
+                    }
+                } else {
+                    const confirm = await stripe.confirmCardPayment(clientSecret, { payment_method: paymentMethodId });
+                    if (confirm.error) {
+                        throw new Error(confirm.error.message || 'Conferma pagamento fallita');
+                    }
+                    if (confirm.paymentIntent && confirm.paymentIntent.status !== 'succeeded') {
+                        // 3DS handled automatically by Stripe
+                    }
+                }
+
+                const donationResp = await fetch((config.baseUrl || '') + 'https://platform.alpha.trustmeup.com/api/integration/v1/create-donation/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...(config.headers || {}) },
+                    body: JSON.stringify({
+                        amount: String(config.amount),
+                        stripePaymentMethodId: confirmedPaymentMethodId,
+                        intendedEmail: email,
+                        firstName: (formData.get('firstName') || '').toString().trim(),
+                        lastName: (formData.get('lastName') || '').toString().trim(),
+                        phoneNumber: '',
+                        stripePaymentMethodType: 'card',
+                        taxId: '',
+                        vatNumber: '',
+                        note: ''
+                    })
+                });
+                if (!donationResp.ok) {
+                    const t = await donationResp.text();
+                    throw new Error(t || 'Errore creazione donazione');
+                }
+                const donationJson = await donationResp.json();
+
                 TMUPayment.close();
-                config.onSuccess(result);
+                config.onSuccess({ success: true, donation: donationJson });
             } catch (error) {
-                config.onError(error.error || 'Pagamento non riuscito');
+                config.onError(error.message || 'Pagamento non riuscito');
+            } finally {
+                submitBtn.disabled = false;
             }
         });
 
