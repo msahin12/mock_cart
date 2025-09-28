@@ -782,10 +782,6 @@ window.TMUPayment = (function () {
             const selectedMethod = popup.querySelector('.tmu-popup-method.active').dataset.method;
 
             try {
-                if (selectedMethod !== 'card') {
-                    throw new Error('Metodo di pagamento non supportato in questo popup');
-                }
-
                 if (!config.stripePublicKey) {
                     throw new Error('Chiave pubblicabile Stripe non configurata');
                 }
@@ -795,29 +791,8 @@ window.TMUPayment = (function () {
                     elements = stripe.elements();
                 }
 
-                if (!cardElement) {
-                    const style = { base: { fontSize: '16px' } };
-                    cardElement = elements.create('card', { style });
-                    const mountPoint = popup.querySelector('#tmu-card-element');
-                    if (mountPoint) cardElement.mount(mountPoint);
-                }
-
-                const cardholderName = (formData.get('cardholderName') || '').toString().trim();
-                const email = (formData.get('email') || '').toString().trim();
-
-                const pmResult = await stripe.createPaymentMethod({
-                    type: 'card',
-                    card: cardElement,
-                    billing_details: { name: cardholderName, email }
-                });
-                if (pmResult.error) {
-                    throw new Error(pmResult.error.message || 'Errore creazione metodo di pagamento');
-                }
-
-                const paymentMethodId = pmResult.paymentMethod.id;
-
                 const fd = new FormData();
-                fd.append('stripe_payment_method_type', 'card');
+                fd.append('stripe_payment_method_type', selectedMethod);
 
                 const csResp = await fetch((config.baseUrl || '') + 'https://platform.alpha.trustmeup.com/api/integration/v1/donations/client-secret/', {
                     method: 'POST',
@@ -833,24 +808,90 @@ window.TMUPayment = (function () {
                     throw new Error('Client secret non disponibile');
                 }
 
-                const isSetupIntent = clientSecret.startsWith('seti_');
-                let confirmedPaymentMethodId = paymentMethodId;
-                if (!isSetupIntent) {
-                    const confirm = await stripe.confirmCardSetup(clientSecret, { payment_method: paymentMethodId });
-                    if (confirm.error) {
-                        throw new Error(confirm.error.message || 'Conferma setup fallita');
+                let paymentMethodId = null;
+
+                if (selectedMethod === 'card') {
+                    if (!cardElement) {
+                        const style = { base: { fontSize: '16px' } };
+                        cardElement = elements.create('card', { style });
+                        const mountPoint = popup.querySelector('#tmu-card-element');
+                        if (mountPoint && !mountPoint.hasChildNodes()) {
+                            cardElement.mount(mountPoint);
+                        }
                     }
-                    if (confirm.setupIntent && confirm.setupIntent.status === 'succeeded') {
-                        confirmedPaymentMethodId = confirm.setupIntent.payment_method || confirmedPaymentMethodId;
+
+                    const cardholderName = (formData.get('cardholderName') || '').toString().trim();
+                    const email = (formData.get('email') || '').toString().trim();
+
+                    const pmResult = await stripe.createPaymentMethod({
+                        type: 'card',
+                        card: cardElement,
+                        billing_details: { name: cardholderName, email }
+                    });
+                    if (pmResult.error) {
+                        throw new Error(pmResult.error.message || 'Errore creazione metodo di pagamento');
                     }
+
+                    paymentMethodId = pmResult.paymentMethod.id;
+
+                    const isSetupIntent = clientSecret.startsWith('seti_');
+                    if (!isSetupIntent) {
+                        const confirm = await stripe.confirmCardSetup(clientSecret, { payment_method: paymentMethodId });
+                        if (confirm.error) {
+                            throw new Error(confirm.error.message || 'Conferma setup fallita');
+                        }
+                        if (confirm.setupIntent && confirm.setupIntent.status === 'succeeded') {
+                            paymentMethodId = confirm.setupIntent.payment_method || paymentMethodId;
+                        }
+                    } else {
+                        const confirm = await stripe.confirmCardPayment(clientSecret, { payment_method: paymentMethodId });
+                        if (confirm.error) {
+                            throw new Error(confirm.error.message || 'Conferma pagamento fallita');
+                        }
+                    }
+                } else if (selectedMethod === 'paypal') {
+                    const email = (formData.get('email') || '').toString().trim();
+                    const firstName = (formData.get('firstName') || '').toString().trim();
+                    const lastName = (formData.get('lastName') || '').toString().trim();
+
+                    const returnUrl = new URL(window.location.href);
+                    returnUrl.searchParams.set('tmuPayPal', '1');
+
+                    const confirmFn = clientSecret.startsWith('seti_')
+                        ? stripe.confirmPayPalSetup
+                        : stripe.confirmPayPalPayment;
+
+                    const result = await confirmFn(clientSecret, {
+                        return_url: returnUrl.toString(),
+                        payment_method: {
+                            billing_details: {
+                                email,
+                                name: `${firstName} ${lastName}`.trim(),
+                            }
+                        }
+                    });
+
+                    if (result.error) {
+                        throw new Error(result.error.message || 'Conferma PayPal fallita');
+                    }
+
+                    const intent = result.setupIntent || result.paymentIntent;
+                    if (!intent) {
+                        throw new Error('Intent PayPal non disponibile');
+                    }
+
+                    if (intent.status === 'requires_action' || intent.status === 'requires_confirmation') {
+                        submitBtn.disabled = false;
+                        return;
+                    }
+
+                    if (intent.status !== 'succeeded') {
+                        throw new Error('PayPal non completato');
+                    }
+
+                    paymentMethodId = intent.payment_method;
                 } else {
-                    const confirm = await stripe.confirmCardPayment(clientSecret, { payment_method: paymentMethodId });
-                    if (confirm.error) {
-                        throw new Error(confirm.error.message || 'Conferma pagamento fallita');
-                    }
-                    if (confirm.paymentIntent && confirm.paymentIntent.status !== 'succeeded') {
-                        // 3DS handled automatically by Stripe
-                    }
+                    throw new Error('Metodo di pagamento non supportato');
                 }
 
                 const donationResp = await fetch((config.baseUrl || '') + 'https://platform.alpha.trustmeup.com/api/integration/v1/create-donation/', {
@@ -858,12 +899,12 @@ window.TMUPayment = (function () {
                     headers: { 'Content-Type': 'application/json', ...(config.headers || {}) },
                     body: JSON.stringify({
                         amount: String(config.amount),
-                        stripePaymentMethodId: confirmedPaymentMethodId,
-                        intendedEmail: email,
+                        stripePaymentMethodId: paymentMethodId,
+                        intendedEmail: (formData.get('email') || '').toString().trim(),
                         firstName: (formData.get('firstName') || '').toString().trim(),
                         lastName: (formData.get('lastName') || '').toString().trim(),
                         phoneNumber: '',
-                        stripePaymentMethodType: 'card',
+                        stripePaymentMethodType: selectedMethod,
                         taxId: '',
                         vatNumber: '',
                         note: ''
