@@ -780,8 +780,15 @@ window.TMUPayment = (function () {
             submitBtn.disabled = true;
             const formData = new FormData(form);
             const selectedMethod = popup.querySelector('.tmu-popup-method.active').dataset.method;
+            const email = (formData.get('email') || '').toString().trim();
+            const firstName = (formData.get('firstName') || '').toString().trim();
+            const lastName = (formData.get('lastName') || '').toString().trim();
 
             try {
+                let transactionId = null;
+                let paymentMethodId = null;
+                let requiresRedirect = false;
+
                 if (!config.stripePublicKey) {
                     throw new Error('Chiave pubblicabile Stripe non configurata');
                 }
@@ -790,25 +797,6 @@ window.TMUPayment = (function () {
                     stripe = await loadStripeJs(config.stripePublicKey);
                     elements = stripe.elements();
                 }
-
-                const fd = new FormData();
-                fd.append('stripe_payment_method_type', selectedMethod);
-
-                const csResp = await fetch((config.baseUrl || '') + 'https://platform.alpha.trustmeup.com/api/integration/v1/donations/client-secret/', {
-                    method: 'POST',
-                    headers: { ...(config.headers || {}) },
-                    body: fd
-                });
-                if (!csResp.ok) {
-                    throw new Error('Errore creazione client secret');
-                }
-                const csJson = await csResp.json();
-                const clientSecret = csJson.client_secret || csJson.clientSecret || csJson?.data?.client_secret;
-                if (!clientSecret) {
-                    throw new Error('Client secret non disponibile');
-                }
-
-                let paymentMethodId = null;
 
                 if (selectedMethod === 'card') {
                     if (!cardElement) {
@@ -821,7 +809,6 @@ window.TMUPayment = (function () {
                     }
 
                     const cardholderName = (formData.get('cardholderName') || '').toString().trim();
-                    const email = (formData.get('email') || '').toString().trim();
 
                     const pmResult = await stripe.createPaymentMethod({
                         type: 'card',
@@ -833,82 +820,42 @@ window.TMUPayment = (function () {
                     }
 
                     paymentMethodId = pmResult.paymentMethod.id;
-
-                    const isSetupIntent = clientSecret.startsWith('seti_');
-                    if (!isSetupIntent) {
-                        const confirm = await stripe.confirmCardSetup(clientSecret, { payment_method: paymentMethodId });
-                        if (confirm.error) {
-                            throw new Error(confirm.error.message || 'Conferma setup fallita');
-                        }
-                        if (confirm.setupIntent && confirm.setupIntent.status === 'succeeded') {
-                            paymentMethodId = confirm.setupIntent.payment_method || paymentMethodId;
-                        }
-                    } else {
-                        const confirm = await stripe.confirmCardPayment(clientSecret, { payment_method: paymentMethodId });
-                        if (confirm.error) {
-                            throw new Error(confirm.error.message || 'Conferma pagamento fallita');
-                        }
-                    }
                 } else if (selectedMethod === 'paypal') {
-                    const email = (formData.get('email') || '').toString().trim();
-                    const firstName = (formData.get('firstName') || '').toString().trim();
-                    const lastName = (formData.get('lastName') || '').toString().trim();
-
-                    const returnUrl = new URL(window.location.href);
-                    returnUrl.searchParams.set('tmuPayPal', '1');
-
-                    const confirmFn = clientSecret.startsWith('seti_')
-                        ? stripe.confirmPayPalSetup
-                        : stripe.confirmPayPalPayment;
-
-                    const result = await confirmFn(clientSecret, {
-                        return_url: returnUrl.toString(),
-                        payment_method: {
-                            billing_details: {
-                                email,
-                                name: `${firstName} ${lastName}`.trim(),
-                            }
+                    // For PayPal, we need to create a payment method first
+                    const pmResult = await stripe.createPaymentMethod({
+                        type: 'paypal',
+                        billing_details: {
+                            email,
+                            name: `${firstName} ${lastName}`.trim(),
                         }
                     });
-
-                    if (result.error) {
-                        throw new Error(result.error.message || 'Conferma PayPal fallita');
+                    if (pmResult.error) {
+                        throw new Error(pmResult.error.message || 'Errore creazione metodo di pagamento PayPal');
                     }
-
-                    const intent = result.setupIntent || result.paymentIntent;
-                    if (!intent) {
-                        throw new Error('Intent PayPal non disponibile');
-                    }
-
-                    if (intent.status === 'requires_action' || intent.status === 'requires_confirmation') {
-                        submitBtn.disabled = false;
-                        return;
-                    }
-
-                    if (intent.status !== 'succeeded') {
-                        throw new Error('PayPal non completato');
-                    }
-
-                    paymentMethodId = intent.payment_method;
+                    paymentMethodId = pmResult.paymentMethod.id;
                 } else {
                     throw new Error('Metodo di pagamento non supportato');
                 }
 
-                const donationResp = await fetch((config.baseUrl || '') + 'https://platform.alpha.trustmeup.com/api/integration/v1/create-donation/', {
+                const payload = {
+                    amount: String(config.amount),
+                    intendedEmail: email,
+                    firstName,
+                    lastName,
+                    phoneNumber: '',
+                    stripePaymentMethodType: selectedMethod,
+                    taxId: '',
+                    vatNumber: '',
+                    note: ''
+                };
+                if (paymentMethodId) {
+                    payload.stripePaymentMethodId = paymentMethodId;
+                }
+
+                const donationResp = await fetch((config.baseUrl || '') + 'https://platform.alpha.trustmeup.com/api/integration/v1/donations/create-donation/', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', ...(config.headers || {}) },
-                    body: JSON.stringify({
-                        amount: String(config.amount),
-                        stripePaymentMethodId: paymentMethodId,
-                        intendedEmail: (formData.get('email') || '').toString().trim(),
-                        firstName: (formData.get('firstName') || '').toString().trim(),
-                        lastName: (formData.get('lastName') || '').toString().trim(),
-                        phoneNumber: '',
-                        stripePaymentMethodType: selectedMethod,
-                        taxId: '',
-                        vatNumber: '',
-                        note: ''
-                    })
+                    body: JSON.stringify(payload)
                 });
                 if (!donationResp.ok) {
                     const t = await donationResp.text();
@@ -916,8 +863,53 @@ window.TMUPayment = (function () {
                 }
                 const donationJson = await donationResp.json();
 
-                TMUPayment.close();
-                config.onSuccess({ success: true, donation: donationJson });
+                const clientSecret = donationJson.stripeClientSecret || donationJson.stripe_client_secret;
+                if (!clientSecret) {
+                    throw new Error('Client secret non disponibile');
+                }
+
+                const isSetupIntent = clientSecret.startsWith('seti_');
+                let confirmResult = null;
+
+                if (selectedMethod === 'card') {
+                    confirmResult = isSetupIntent
+                        ? await stripe.confirmCardSetup(clientSecret, { payment_method: paymentMethodId })
+                        : await stripe.confirmCardPayment(clientSecret, { payment_method: paymentMethodId });
+                } else if (selectedMethod === 'paypal') {
+                    const returnUrl = new URL(window.location.href);
+                    returnUrl.searchParams.set('tmuPayPal', '1');
+                    const confirmOptions = {
+                        return_url: returnUrl.toString(),
+                        payment_method: {
+                            billing_details: {
+                                email,
+                                name: `${firstName} ${lastName}`.trim(),
+                            }
+                        }
+                    };
+                    confirmResult = isSetupIntent
+                        ? await stripe.confirmPayPalSetup(clientSecret, confirmOptions)
+                        : await stripe.confirmPayPalPayment(clientSecret, confirmOptions);
+                }
+
+                if (confirmResult?.error) {
+                    throw new Error(confirmResult.error.message || 'Conferma pagamento fallita');
+                }
+
+                const finalIntent = confirmResult?.setupIntent || confirmResult?.paymentIntent;
+                if (finalIntent) {
+                    transactionId = finalIntent.id || transactionId;
+                    paymentMethodId = finalIntent.payment_method || paymentMethodId;
+                    requiresRedirect = finalIntent.status === 'requires_action' || finalIntent.status === 'requires_confirmation';
+                    if (!requiresRedirect && finalIntent.status && !['succeeded', 'processing', 'requires_capture'].includes(finalIntent.status)) {
+                        throw new Error('Pagamento non completato');
+                    }
+                }
+
+                if (!requiresRedirect) {
+                    TMUPayment.close();
+                }
+                config.onSuccess({ success: true, transactionId, paymentMethodId, donation: donationJson, requiresRedirect });
             } catch (error) {
                 config.onError(error.message || 'Pagamento non riuscito');
             } finally {
