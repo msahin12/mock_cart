@@ -62,6 +62,9 @@ window.TMUPayment = (function () {
                 stripePublicKey: options.stripePublicKey || 'pk_test_51KKIdNFmHEDbKHDRbwRM4LVISCGSNtPoOv691YhuDiXCEAi3bN3m5D9GWXCWFhTyH3MvAuM3hIanBBPTPQ20MWt600UQ0kXL2F',
                 headers: { ...(options.headers || {}), "AUTHORIZATION": "IntegrationToken eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImNiODBmZTdhLWY4YjctNGM4ZC1hYjc0LWRlNWMxMjQyZTQ4ZSIsInVzZXJfaWQiOiIyYjI0ZTIyNi1iZWVkLTQ2Y2QtOTA5MC1lZjlhYTc0YjExNWUifQ.kjkTsg-3Dsjl-wT8xYIPwdIFqPlGZakzefG-ibmAebB_k5HvxXTbGa7Iyfntl3Iu53SXaJ44feeLbxk83HhvEwOJA1FwDSwNsCJLMH0TLN2GKN3tB4kwj5e6kDpFg1FiPnX_XpAhQtLzUTY3DHZCNFEa6MNQ4roLCfPUDQKZgNhfS95HCmSWn7Ty6YPngijhP_aA58i-QDRgVQ95cXnOGY8Mf07Lwo19zG08xT37FlI7-yh1yg0x8xwwqPqbeNTfNfZdDD-wS9XSsbOaK93UX1kf211WKU9PyPfFcEhY6ZtwdfBZwMDmgXpgaaVKkwVN4FRhs1c2ppU9vGcTBtkP2wNpQR2GG1Sw44q07pT4gDgRl3j4s1EdrK_cUQtT_bMOH3vsxeciwsA8mkUDWmCEiy0Iyl1A1uKOcSF6aZiZ7SAJPwDkxgWbx1Ee0RYFsA2Bp_VI5ooKzDTMNcLXYwopUfSj7ilriXDM1LAED7KTCB1TSbiF53lUIl829ukRPNfoHvOUjdLrlcBeTjcSdAsj8rfVob0izGTMZe8K-ZP1iuKzYnwKeGuzzOew7W_PxkbFSI_QQuC4LCBI-NLIXFcgGsNHDECdIMESRI0MH33pfuP7PsQnhlLJZk5fqF2lyS4P3Q8xxa0LJzgxEqp72HCeYifSRpRUzaYnKiSPgRi_LO0" },
                 returnUrl: options.returnUrl || '',
+                firstName: options.firstName || '',
+                lastName: options.lastName || '',
+                email: options.email || '',
                 onSuccess: options.onSuccess || function () { },
                 onCancel: options.onCancel || function () { },
                 onError: options.onError || function (error) { alert('Errore di pagamento: ' + error); }
@@ -629,19 +632,19 @@ window.TMUPayment = (function () {
                 </div>
                 
                 <form class="tmu-popup-form" novalidate>
-                    <div class="tmu-popup-field">
+                    <div class="tmu-popup-field" data-field="firstName">
                         <label class="tmu-popup-label">NOME*</label>
                         <input type="text" name="firstName" placeholder="Nome" class="tmu-popup-input" required>
                         <div class="tmu-popup-error" data-error-for="firstName">Inserisci il nome</div>
                     </div>
                     
-                    <div class="tmu-popup-field">
+                    <div class="tmu-popup-field" data-field="lastName">
                         <label class="tmu-popup-label">COGNOME*</label>
                         <input type="text" name="lastName" placeholder="Cognome" class="tmu-popup-input" required>
                         <div class="tmu-popup-error" data-error-for="lastName">Inserisci il cognome</div>
                     </div>
                     
-                    <div class="tmu-popup-field">
+                    <div class="tmu-popup-field" data-field="email">
                         <label class="tmu-popup-label">E-MAIL*</label>
                         <input type="email" name="email" placeholder="Il tuo indirizzo email" class="tmu-popup-input" required>
                         <div class="tmu-popup-error" data-error-for="email">Inserisci un indirizzo email valido</div>
@@ -711,6 +714,20 @@ window.TMUPayment = (function () {
                 </form>
             </div>
         `;
+
+        // Prefill and optionally hide user fields based on provided config
+        try {
+            const setValueAndMaybeHide = (fieldName, value) => {
+                if (!value) return;
+                const input = popup.querySelector(`[name="${fieldName}"]`);
+                if (input) { input.value = value; }
+                const container = popup.querySelector(`[data-field="${fieldName}"]`);
+                if (container) { container.style.display = 'none'; }
+            };
+            setValueAndMaybeHide('firstName', (config.firstName || '').toString().trim());
+            setValueAndMaybeHide('lastName', (config.lastName || '').toString().trim());
+            setValueAndMaybeHide('email', (config.email || '').toString().trim());
+        } catch (_) { }
 
         // Add event listeners
         const closeBtn = popup.querySelector('.tmu-popup-close');
@@ -816,13 +833,13 @@ window.TMUPayment = (function () {
             clearErrors();
             let valid = true;
             const get = (n) => (popup.querySelector(`[name="${n}"]`) || {}).value || '';
-            const email = get('email').trim();
-            const first = get('firstName').trim();
-            const last = get('lastName').trim();
+            const email = (config.email || get('email')).toString().trim();
+            const first = (config.firstName || get('firstName')).toString().trim();
+            const last = (config.lastName || get('lastName')).toString().trim();
             const method = popup.querySelector('.tmu-popup-method.active').dataset.method;
-            if (!first) { setError('firstName', 'Inserisci il nome'); valid = false; }
-            if (!last) { setError('lastName', 'Inserisci il cognome'); valid = false; }
-            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setError('email', 'Inserisci un indirizzo email valido'); valid = false; }
+            if (!config.firstName && !first) { setError('firstName', 'Inserisci il nome'); valid = false; }
+            if (!config.lastName && !last) { setError('lastName', 'Inserisci il cognome'); valid = false; }
+            if (!config.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setError('email', 'Inserisci un indirizzo email valido'); valid = false; }
             if (!popup.querySelector('#agreeToTerms').checked) { setError('agreeToTerms', "Devi accettare i Termini d'uso"); valid = false; }
             if (method === 'card') {
                 const holder = get('cardholderName').trim();
@@ -837,9 +854,9 @@ window.TMUPayment = (function () {
             submitBtn.disabled = true;
             const formData = new FormData(form);
             const selectedMethod = popup.querySelector('.tmu-popup-method.active').dataset.method;
-            const email = (formData.get('email') || '').toString().trim();
-            const firstName = (formData.get('firstName') || '').toString().trim();
-            const lastName = (formData.get('lastName') || '').toString().trim();
+            const email = (config.email || formData.get('email') || '').toString().trim();
+            const firstName = (config.firstName || formData.get('firstName') || '').toString().trim();
+            const lastName = (config.lastName || formData.get('lastName') || '').toString().trim();
 
             try {
                 let transactionId = null;

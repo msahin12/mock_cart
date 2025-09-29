@@ -72,6 +72,9 @@ export default function ShoppingCart() {
                 window.TMUPayment.open({
                     amount: total,
                     returnUrl: "/success",
+                    // firstName: "Ada",
+                    // lastName: "Lovelace",
+                    // email: "ada@example.com",
                     onSuccess: (result) => {
                         console.log('Payment result:', result);
                     },
