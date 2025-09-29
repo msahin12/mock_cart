@@ -1,10 +1,17 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import ShoppingCart from './ShoppingCart.jsx'
+import SuccessPage from './SuccessPage.jsx'
 import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
     <React.StrictMode>
-        <ShoppingCart />
+        <Router>
+            <Routes>
+                <Route path="/" element={<ShoppingCart />} />
+                <Route path="/success" element={<SuccessPage />} />
+            </Routes>
+        </Router>
     </React.StrictMode>,
 ) 

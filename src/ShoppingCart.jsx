@@ -71,8 +71,9 @@ export default function ShoppingCart() {
             if (window.TMUPayment) {
                 window.TMUPayment.open({
                     amount: total,
+                    returnUrl: "/success",
+
                     onSuccess: (result) => {
-                        alert(`Payment successful! Transaction ID: ${result.transactionId}`);
                         console.log('Payment result:', result);
                     },
                     onCancel: () => {

@@ -59,8 +59,9 @@ window.TMUPayment = (function () {
                 amount: options.amount || 0,
                 currency: options.currency || 'USD',
                 baseUrl: options.baseUrl || '',
-                stripePublicKey: options.stripePublicKey || 'pk_test_q373Go6r9vYhH3yk2njg5Vfu00nCBgtDPr',
+                stripePublicKey: options.stripePublicKey || 'pk_test_51KKIdNFmHEDbKHDRbwRM4LVISCGSNtPoOv691YhuDiXCEAi3bN3m5D9GWXCWFhTyH3MvAuM3hIanBBPTPQ20MWt600UQ0kXL2F',
                 headers: { ...(options.headers || {}), "AUTHORIZATION": "IntegrationToken eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImNiODBmZTdhLWY4YjctNGM4ZC1hYjc0LWRlNWMxMjQyZTQ4ZSIsInVzZXJfaWQiOiIyYjI0ZTIyNi1iZWVkLTQ2Y2QtOTA5MC1lZjlhYTc0YjExNWUifQ.kjkTsg-3Dsjl-wT8xYIPwdIFqPlGZakzefG-ibmAebB_k5HvxXTbGa7Iyfntl3Iu53SXaJ44feeLbxk83HhvEwOJA1FwDSwNsCJLMH0TLN2GKN3tB4kwj5e6kDpFg1FiPnX_XpAhQtLzUTY3DHZCNFEa6MNQ4roLCfPUDQKZgNhfS95HCmSWn7Ty6YPngijhP_aA58i-QDRgVQ95cXnOGY8Mf07Lwo19zG08xT37FlI7-yh1yg0x8xwwqPqbeNTfNfZdDD-wS9XSsbOaK93UX1kf211WKU9PyPfFcEhY6ZtwdfBZwMDmgXpgaaVKkwVN4FRhs1c2ppU9vGcTBtkP2wNpQR2GG1Sw44q07pT4gDgRl3j4s1EdrK_cUQtT_bMOH3vsxeciwsA8mkUDWmCEiy0Iyl1A1uKOcSF6aZiZ7SAJPwDkxgWbx1Ee0RYFsA2Bp_VI5ooKzDTMNcLXYwopUfSj7ilriXDM1LAED7KTCB1TSbiF53lUIl829ukRPNfoHvOUjdLrlcBeTjcSdAsj8rfVob0izGTMZe8K-ZP1iuKzYnwKeGuzzOew7W_PxkbFSI_QQuC4LCBI-NLIXFcgGsNHDECdIMESRI0MH33pfuP7PsQnhlLJZk5fqF2lyS4P3Q8xxa0LJzgxEqp72HCeYifSRpRUzaYnKiSPgRi_LO0" },
+                returnUrl: options.returnUrl || '',
                 onSuccess: options.onSuccess || function () { },
                 onCancel: options.onCancel || function () { },
                 onError: options.onError || function (error) { alert('Errore di pagamento: ' + error); }
@@ -876,7 +877,7 @@ window.TMUPayment = (function () {
                         ? await stripe.confirmCardSetup(clientSecret, { payment_method: paymentMethodId })
                         : await stripe.confirmCardPayment(clientSecret, { payment_method: paymentMethodId });
                 } else if (selectedMethod === 'paypal') {
-                    const returnUrl = new URL(window.location.href);
+                    const returnUrl = new URL(config.returnUrl || window.location.href);
                     returnUrl.searchParams.set('tmuPayPal', '1');
                     const confirmOptions = {
                         return_url: returnUrl.toString(),
@@ -908,8 +909,12 @@ window.TMUPayment = (function () {
 
                 if (!requiresRedirect) {
                     TMUPayment.close();
+                    if (config.returnUrl) {
+                        try { window.location.assign(config.returnUrl); } catch (_) { window.location.href = config.returnUrl; }
+                        return;
+                    }
                 }
-                config.onSuccess({ success: true, transactionId, paymentMethodId, donation: donationJson, requiresRedirect });
+                config.onSuccess({ success: true, transactionId, paymentMethodId, donation: donationJson, requiresRedirect, returnUrl: config.returnUrl || null });
             } catch (error) {
                 config.onError(error.message || 'Pagamento non riuscito');
             } finally {
