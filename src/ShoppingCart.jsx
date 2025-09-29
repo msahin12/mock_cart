@@ -72,7 +72,6 @@ export default function ShoppingCart() {
                 window.TMUPayment.open({
                     amount: total,
                     returnUrl: "/success",
-
                     onSuccess: (result) => {
                         console.log('Payment result:', result);
                     },
@@ -80,7 +79,7 @@ export default function ShoppingCart() {
                         console.log('Payment cancelled');
                     },
                     onError: (error) => {
-                        alert(`Payment failed: ${error}`);
+                        console.log(`Payment failed: ${error}`);
                     }
                 });
             } else {

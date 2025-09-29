@@ -1,5 +1,5 @@
-import { CheckCircle, ArrowLeft, Home } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { CheckCircle, ArrowLeft, Home, XCircle } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 // Simple Card component
 const Card = ({ children, className = "" }) => (
@@ -41,6 +41,11 @@ const Button = ({ children, onClick, variant = "default", size = "default", clas
 
 export default function SuccessPage() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+
+    const redirectStatus = searchParams.get('redirect_status');
+    const isPaymentFailed = redirectStatus === 'failed';
+    const paymentIntent = searchParams.get('payment_intent');
 
     const handleGoBack = () => {
         window.history.back();
@@ -49,6 +54,54 @@ export default function SuccessPage() {
     const handleGoHome = () => {
         navigate('/');
     };
+
+    if (isPaymentFailed) {
+        return (
+            <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-6">
+                <Card className="max-w-md w-full">
+                    <CardContent className="p-8 text-center">
+                        <div className="mb-6">
+                            <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+                            <h1 className="text-2xl font-bold text-gray-900 mb-2">Payment Failed</h1>
+                            <p className="text-gray-600">
+                                Unfortunately, your payment could not be processed. Please try again or use a different payment method.
+                            </p>
+                            {paymentIntent && (
+                                <p className="text-sm text-gray-500 mt-2">
+                                    Payment ID: {paymentIntent}
+                                </p>
+                            )}
+                        </div>
+
+                        <div className="space-y-3">
+                            <Button
+                                onClick={handleGoHome}
+                                className="w-full rounded-2xl flex items-center justify-center gap-2"
+                            >
+                                <Home className="w-4 h-4" />
+                                Try Again
+                            </Button>
+
+                            <Button
+                                onClick={handleGoBack}
+                                variant="outline"
+                                className="w-full rounded-2xl flex items-center justify-center gap-2"
+                            >
+                                <ArrowLeft className="w-4 h-4" />
+                                Go Back
+                            </Button>
+                        </div>
+
+                        <div className="mt-6 pt-6 border-t border-gray-200">
+                            <p className="text-sm text-gray-500">
+                                If you continue to experience issues, please contact support.
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-6">

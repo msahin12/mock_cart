@@ -440,6 +440,34 @@ window.TMUPayment = (function () {
                 animation: shake 0.3s ease-in-out;
             }
             
+            .tmu-popup-error-message {
+                background: #fef2f2;
+                border: 1px solid #fecaca;
+                border-radius: 12px;
+                padding: 12px 16px;
+                margin-bottom: 16px;
+                animation: slideDown 0.3s ease-out;
+            }
+            
+            .tmu-popup-error-text {
+                color: #dc2626;
+                font-size: 14px;
+                font-weight: 500;
+                text-align: center;
+                line-height: 1.4;
+            }
+            
+            @keyframes slideDown {
+                from { 
+                    opacity: 0;
+                    transform: translateY(-10px);
+                }
+                to { 
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            
             @keyframes shake {
                 0%, 100% { transform: translateX(0); }
                 25% { transform: translateX(-4px); }
@@ -672,6 +700,10 @@ window.TMUPayment = (function () {
                         <div class="tmu-popup-error" data-error-for="agreeToTerms">Devi accettare i Termini d'uso</div>
                     </div>
                     
+                    <div class="tmu-popup-error-message" style="display: none;">
+                        <div class="tmu-popup-error-text"></div>
+                    </div>
+                    
                     <div class="tmu-popup-buttons">
                         <button type="button" class="tmu-popup-button tmu-popup-button-cancel">Annulla</button>
                         <button type="submit" class="tmu-popup-button tmu-popup-button-submit">CONTINUA</button>
@@ -744,6 +776,13 @@ window.TMUPayment = (function () {
             setupStripeIfNeeded();
         }
 
+        // Clear error message when user interacts with form
+        const inputs = popup.querySelectorAll('.tmu-popup-input, .tmu-popup-checkbox');
+        inputs.forEach(input => {
+            input.addEventListener('input', hideErrorMessage);
+            input.addEventListener('change', hideErrorMessage);
+        });
+
         function setError(name, message) {
             const err = popup.querySelector(`[data-error-for="${name}"]`);
             const input = popup.querySelector(`[name="${name}"]`);
@@ -754,6 +793,23 @@ window.TMUPayment = (function () {
         function clearErrors() {
             popup.querySelectorAll('.tmu-popup-error').forEach(el => el.style.display = 'none');
             popup.querySelectorAll('.tmu-input-error').forEach(el => el.classList.remove('tmu-input-error'));
+            hideErrorMessage();
+        }
+
+        function showErrorMessage(message) {
+            const errorMessage = popup.querySelector('.tmu-popup-error-message');
+            const errorText = popup.querySelector('.tmu-popup-error-text');
+            if (errorMessage && errorText) {
+                errorText.textContent = message;
+                errorMessage.style.display = 'block';
+            }
+        }
+
+        function hideErrorMessage() {
+            const errorMessage = popup.querySelector('.tmu-popup-error-message');
+            if (errorMessage) {
+                errorMessage.style.display = 'none';
+            }
         }
 
         function validateFields() {
@@ -877,7 +933,12 @@ window.TMUPayment = (function () {
                         ? await stripe.confirmCardSetup(clientSecret, { payment_method: paymentMethodId })
                         : await stripe.confirmCardPayment(clientSecret, { payment_method: paymentMethodId });
                 } else if (selectedMethod === 'paypal') {
-                    const returnUrl = new URL(config.returnUrl || window.location.href);
+                    // Handle relative URLs by converting them to absolute URLs
+                    let returnUrlString = config.returnUrl || window.location.href;
+                    if (returnUrlString.startsWith('/')) {
+                        returnUrlString = window.location.origin + returnUrlString;
+                    }
+                    const returnUrl = new URL(returnUrlString);
                     returnUrl.searchParams.set('tmuPayPal', '1');
                     const confirmOptions = {
                         return_url: returnUrl.toString(),
@@ -910,13 +971,24 @@ window.TMUPayment = (function () {
                 if (!requiresRedirect) {
                     TMUPayment.close();
                     if (config.returnUrl) {
-                        try { window.location.assign(config.returnUrl); } catch (_) { window.location.href = config.returnUrl; }
+                        try {
+                            // Handle relative URLs by converting them to absolute URLs
+                            let returnUrlString = config.returnUrl;
+                            if (returnUrlString.startsWith('/')) {
+                                returnUrlString = window.location.origin + returnUrlString;
+                            }
+                            window.location.assign(returnUrlString);
+                        } catch (_) {
+                            window.location.href = config.returnUrl;
+                        }
                         return;
                     }
                 }
                 config.onSuccess({ success: true, transactionId, paymentMethodId, donation: donationJson, requiresRedirect, returnUrl: config.returnUrl || null });
             } catch (error) {
-                config.onError(error.message || 'Pagamento non riuscito');
+                const errorMessage = error.message || 'Pagamento non riuscito';
+                showErrorMessage(errorMessage);
+                config.onError(errorMessage);
             } finally {
                 submitBtn.disabled = false;
             }
