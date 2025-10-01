@@ -48,6 +48,35 @@ window.TMUPayment = (function () {
         });
     }
 
+    function loadJsPdf() {
+        return new Promise((resolve, reject) => {
+            if (window.jspdf && window.jspdf.jsPDF && window.jspdf_autoTable) {
+                return resolve({ jsPDF: window.jspdf.jsPDF, autoTable: window.jspdf_autoTable });
+            }
+            const script1 = document.createElement('script');
+            script1.src = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
+            script1.async = true;
+            script1.onload = () => {
+                const script2 = document.createElement('script');
+                script2.src = 'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js';
+                script2.async = true;
+                script2.onload = () => {
+                    try {
+                        const jsPDF = window.jspdf.jsPDF;
+                        const autoTable = window.jspdf_autoTable;
+                        resolve({ jsPDF, autoTable });
+                    } catch (e) {
+                        reject(e);
+                    }
+                };
+                script2.onerror = () => reject(new Error('Failed to load jsPDF AutoTable'));
+                document.head.appendChild(script2);
+            };
+            script1.onerror = () => reject(new Error('Failed to load jsPDF'));
+            document.head.appendChild(script1);
+        });
+    }
+
     // Main API
     const TMUPayment = {
         open: function (options = {}) {
@@ -285,7 +314,7 @@ window.TMUPayment = (function () {
             
             .tmu-popup-methods-grid {
                 display: grid;
-                grid-template-columns: 1fr 1fr;
+                grid-template-columns: 1fr 1fr 1fr;
                 gap: 16px;
             }
             
@@ -671,6 +700,11 @@ window.TMUPayment = (function () {
                                     </svg>
                                 </div>
                             </div>
+                            <div class="tmu-popup-method" data-method="bank">
+                                <div class="tmu-popup-paypal">
+                                    Bonifico bancario
+                                </div>
+                            </div>
                         </div>
                     </div>
                     
@@ -907,6 +941,8 @@ window.TMUPayment = (function () {
                         throw new Error(pmResult.error.message || 'Errore creazione metodo di pagamento PayPal');
                     }
                     paymentMethodId = pmResult.paymentMethod.id;
+                } else if (selectedMethod === 'bank') {
+                    // bank transfer uses Stripe customer_balance; no PaymentMethod creation on client
                 } else {
                     throw new Error('Metodo di pagamento non supportato');
                 }
@@ -917,13 +953,15 @@ window.TMUPayment = (function () {
                     firstName,
                     lastName,
                     phoneNumber: '',
-                    stripePaymentMethodType: selectedMethod,
+                    stripePaymentMethodType: (selectedMethod === 'bank' ? 'customer_balance' : selectedMethod),
                     taxId: '',
                     vatNumber: '',
                     note: ''
                 };
                 if (paymentMethodId) {
                     payload.stripePaymentMethodId = paymentMethodId;
+                } else if (selectedMethod === 'bank') {
+                    payload.stripePaymentMethodId = 'pm_customer_balance';
                 }
 
                 const donationResp = await fetch((config.baseUrl || '') + 'https://platform.alpha.trustmeup.com/api/integration/v1/donations/create-donation/', {
@@ -937,55 +975,80 @@ window.TMUPayment = (function () {
                 }
                 const donationJson = await donationResp.json();
 
-                const clientSecret = donationJson.stripeClientSecret || donationJson.stripe_client_secret;
-                if (!clientSecret) {
-                    throw new Error('Client secret non disponibile');
-                }
-
-                const isSetupIntent = clientSecret.startsWith('seti_');
-                let confirmResult = null;
-
-                if (selectedMethod === 'card') {
-                    confirmResult = isSetupIntent
-                        ? await stripe.confirmCardSetup(clientSecret, { payment_method: paymentMethodId })
-                        : await stripe.confirmCardPayment(clientSecret, { payment_method: paymentMethodId });
-                } else if (selectedMethod === 'paypal') {
-                    // Handle relative URLs by converting them to absolute URLs
-                    let returnUrlString = config.returnUrl || window.location.href;
-                    if (returnUrlString.startsWith('/')) {
-                        returnUrlString = window.location.origin + returnUrlString;
-                    }
-                    const returnUrl = new URL(returnUrlString);
-                    returnUrl.searchParams.set('tmuPayPal', '1');
-                    const confirmOptions = {
-                        return_url: returnUrl.toString(),
-                        payment_method: {
-                            billing_details: {
-                                email,
-                                name: `${firstName} ${lastName}`.trim(),
+                let finalIntent = null;
+                if (selectedMethod === 'bank') {
+                    let donationDetails = donationJson;
+                    try {
+                        const donationId = donationJson?.donationId || donationJson?.id || donationJson?.donation_id;
+                        if (donationId) {
+                            const limited = await fetchLimitedDonation(donationId, config.headers || {});
+                            if (limited) {
+                                donationDetails = { ...donationDetails, ...limited };
+                                if (!donationDetails.stripeRequiresActionData && limited.stripeRequiresActionData) {
+                                    donationDetails.stripeRequiresActionData = limited.stripeRequiresActionData;
+                                }
                             }
                         }
-                    };
-                    confirmResult = isSetupIntent
-                        ? await stripe.confirmPayPalSetup(clientSecret, confirmOptions)
-                        : await stripe.confirmPayPalPayment(clientSecret, confirmOptions);
-                }
+                    } catch (_) { }
 
-                if (confirmResult?.error) {
-                    throw new Error(confirmResult.error.message || 'Conferma pagamento fallita');
-                }
+                    showBankTransferDetails({
+                        donation: donationDetails,
+                        amount: config.amount,
+                        firstName,
+                        lastName,
+                        email
+                    });
+                } else {
+                    const clientSecret = donationJson.stripeClientSecret || donationJson.stripe_client_secret;
+                    if (!clientSecret) {
+                        throw new Error('Client secret non disponibile');
+                    }
 
-                const finalIntent = confirmResult?.setupIntent || confirmResult?.paymentIntent;
-                if (finalIntent) {
-                    transactionId = finalIntent.id || transactionId;
-                    paymentMethodId = finalIntent.payment_method || paymentMethodId;
-                    requiresRedirect = finalIntent.status === 'requires_action' || finalIntent.status === 'requires_confirmation';
-                    if (!requiresRedirect && finalIntent.status && !['succeeded', 'processing', 'requires_capture'].includes(finalIntent.status)) {
-                        throw new Error('Pagamento non completato');
+                    const isSetupIntent = clientSecret.startsWith('seti_');
+                    let confirmResult = null;
+
+                    if (selectedMethod === 'card') {
+                        confirmResult = isSetupIntent
+                            ? await stripe.confirmCardSetup(clientSecret, { payment_method: paymentMethodId })
+                            : await stripe.confirmCardPayment(clientSecret, { payment_method: paymentMethodId });
+                    } else if (selectedMethod === 'paypal') {
+                        // Handle relative URLs by converting them to absolute URLs
+                        let returnUrlString = config.returnUrl || window.location.href;
+                        if (returnUrlString.startsWith('/')) {
+                            returnUrlString = window.location.origin + returnUrlString;
+                        }
+                        const returnUrl = new URL(returnUrlString);
+                        returnUrl.searchParams.set('tmuPayPal', '1');
+                        const confirmOptions = {
+                            return_url: returnUrl.toString(),
+                            payment_method: {
+                                billing_details: {
+                                    email,
+                                    name: `${firstName} ${lastName}`.trim(),
+                                }
+                            }
+                        };
+                        confirmResult = isSetupIntent
+                            ? await stripe.confirmPayPalSetup(clientSecret, confirmOptions)
+                            : await stripe.confirmPayPalPayment(clientSecret, confirmOptions);
+                    }
+
+                    if (confirmResult?.error) {
+                        throw new Error(confirmResult.error.message || 'Conferma pagamento fallita');
+                    }
+
+                    finalIntent = confirmResult?.setupIntent || confirmResult?.paymentIntent;
+                    if (finalIntent) {
+                        transactionId = finalIntent.id || transactionId;
+                        paymentMethodId = finalIntent.payment_method || paymentMethodId;
+                        requiresRedirect = finalIntent.status === 'requires_action' || finalIntent.status === 'requires_confirmation';
+                        if (!requiresRedirect && finalIntent.status && !['succeeded', 'processing', 'requires_capture'].includes(finalIntent.status)) {
+                            throw new Error('Pagamento non completato');
+                        }
                     }
                 }
 
-                if (!requiresRedirect) {
+                if (!requiresRedirect && selectedMethod !== 'bank') {
                     TMUPayment.close();
                     if (config.returnUrl) {
                         try {
@@ -1001,7 +1064,7 @@ window.TMUPayment = (function () {
                         return;
                     }
                 }
-                config.onSuccess({ success: true, transactionId, paymentMethodId, donation: donationJson, requiresRedirect, returnUrl: config.returnUrl || null });
+                config.onSuccess({ success: true, transactionId, paymentMethodId, donation: donationJson, requiresRedirect, returnUrl: config.returnUrl || null, method: selectedMethod });
             } catch (error) {
                 const errorMessage = error.message || 'Pagamento non riuscito';
                 showErrorMessage(errorMessage);
@@ -1018,6 +1081,88 @@ window.TMUPayment = (function () {
                 config.onCancel();
             }
         });
+
+        function showBankTransferDetails(ctx) {
+            try {
+                const info = ctx.donation?.stripeRequiresActionData || {};
+                const bank = info.bank_account_info || {};
+                const bic = bank.bic || '';
+                const iban = bank.iban || '';
+                const country = bank.country || '';
+                const accountHolderName = bank.account_holder_name || '';
+                const reference = info.reference || '';
+
+                const formEl = popup.querySelector('.tmu-popup-form');
+                if (!formEl) return;
+
+                formEl.innerHTML = `
+                    <div class="tmu-popup-field"><label class="tmu-popup-label">BIC</label><div class="tmu-popup-input" style="height:auto">${bic}</div></div>
+                    <div class="tmu-popup-field"><label class="tmu-popup-label">IBAN</label><div class="tmu-popup-input" style="height:auto">${iban}</div></div>
+                    <div class="tmu-popup-field"><label class="tmu-popup-label">Country</label><div class="tmu-popup-input" style="height:auto">${country}</div></div>
+                    <div class="tmu-popup-field"><label class="tmu-popup-label">Account Holder Name</label><div class="tmu-popup-input" style="height:auto">${accountHolderName}</div></div>
+                    <div class="tmu-popup-field"><label class="tmu-popup-label">Reference</label><div class="tmu-popup-input" style="height:auto">${reference}</div></div>
+                    <div class="tmu-popup-buttons">
+                        <button type="button" class="tmu-popup-button tmu-popup-button-cancel">Close</button>
+                        <button type="button" class="tmu-popup-button tmu-popup-button-submit" id="tmu-download-pdf">Download PDF</button>
+                    </div>
+                `;
+
+                const newCancel = popup.querySelector('.tmu-popup-button-cancel');
+                if (newCancel) {
+                    newCancel.addEventListener('click', () => {
+                        TMUPayment.close();
+                        config.onCancel();
+                    });
+                }
+
+                const downloadBtn = popup.querySelector('#tmu-download-pdf');
+                if (downloadBtn) {
+                    downloadBtn.addEventListener('click', async () => {
+                        try {
+                            const { jsPDF, autoTable } = await loadJsPdf();
+                            const doc = new jsPDF();
+                            doc.setFontSize(16);
+                            const title = 'Bank Transfer';
+                            const pageWidth = doc.internal.pageSize.getWidth();
+                            const textWidth = (doc.getStringUnitWidth(title) * doc.internal.getFontSize()) / doc.internal.scaleFactor;
+                            const xOffset = (pageWidth - textWidth) / 2;
+                            doc.text(title, xOffset, 20);
+
+                            doc.setFontSize(12);
+                            doc.text('Amount:', 20, 40);
+                            doc.text(String(ctx.amount), 60, 40);
+
+                            const tableData = [
+                                ['BIC', bic],
+                                ['IBAN', iban],
+                                ['Country', country],
+                                ['Account Holder Name', accountHolderName],
+                                ['Reference', reference],
+                            ];
+                            autoTable(doc, { startY: 50, body: tableData, theme: 'grid', styles: { fontSize: 10 } });
+                            doc.save('bank-transfer.pdf');
+                        } catch (e) {
+                            alert('Impossibile generare il PDF');
+                        }
+                    });
+                }
+            } catch (_) { }
+        }
+
+        async function fetchLimitedDonation(donationId, headers) {
+            try {
+                const url = `https://platform.alpha.trustmeup.com/api/storefront/donation/${donationId}/limited/`;
+                const resp = await fetch(url, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json', ...(headers || {}) }
+                });
+                if (!resp.ok) return null;
+                const json = await resp.json();
+                return json?.data?.limitedDonation || null;
+            } catch (e) {
+                return null;
+            }
+        }
 
         return popup;
     }
