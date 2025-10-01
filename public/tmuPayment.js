@@ -94,6 +94,9 @@ window.TMUPayment = (function () {
                 firstName: options.firstName || '',
                 lastName: options.lastName || '',
                 email: options.email || '',
+                is_credit_card_visible: options.is_credit_card_visible !== false,
+                is_paypal_visible: options.is_paypal_visible !== false,
+                is_bank_transfer_visible: options.is_bank_transfer_visible !== false,
                 onSuccess: options.onSuccess || function () { },
                 onCancel: options.onCancel || function () { },
                 onError: options.onError || function (error) { alert('Errore di pagamento: ' + error); }
@@ -682,12 +685,12 @@ window.TMUPayment = (function () {
                     <div class="tmu-popup-payment-methods">
                         <h3 class="tmu-popup-methods-title">Metodo di pagamento</h3>
                         <div class="tmu-popup-methods-grid">
-                            <div class="tmu-popup-method active" data-method="card">
+                            <div class="tmu-popup-method ${config.is_credit_card_visible ? 'active' : ''}" data-method="card" style="${config.is_credit_card_visible ? '' : 'display:none;'}">
                                 <div class="tmu-popup-credit-cards">
                                     <span>💳</span> Carte di credito
                                 </div>
                             </div>
-                            <div class="tmu-popup-method" data-method="paypal">
+                            <div class="tmu-popup-method" data-method="paypal" style="${config.is_paypal_visible ? '' : 'display:none;'}">
                                 <div class="tmu-popup-paypal">
                                     <svg width="120" height="40" viewBox="0 0 780 500" xmlns="http://www.w3.org/2000/svg">
                                         <rect width="780" height="500" fill="transparent"/>
@@ -700,7 +703,7 @@ window.TMUPayment = (function () {
                                     </svg>
                                 </div>
                             </div>
-                            <div class="tmu-popup-method" data-method="bank">
+                            <div class="tmu-popup-method" data-method="bank" style="${config.is_bank_transfer_visible ? '' : 'display:none;'}">
                                 <div class="tmu-popup-paypal">
                                     Bonifico bancario
                                 </div>
@@ -822,7 +825,15 @@ window.TMUPayment = (function () {
         });
 
         // Mount Stripe card immediately if card is default selected
-        const defaultMethod = popup.querySelector('.tmu-popup-method.active');
+        let defaultMethod = popup.querySelector('.tmu-popup-method.active');
+        if (!defaultMethod) {
+            // If card hidden, select the first visible method as active
+            const firstVisible = Array.from(popup.querySelectorAll('.tmu-popup-method')).find(m => m.style.display !== 'none');
+            if (firstVisible) {
+                firstVisible.classList.add('active');
+                defaultMethod = firstVisible;
+            }
+        }
         if (defaultMethod && defaultMethod.dataset.method === 'card') {
             setupStripeIfNeeded();
         }
