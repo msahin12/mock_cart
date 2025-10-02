@@ -971,9 +971,10 @@ window.TMUPayment = (function () {
                 };
                 if (paymentMethodId) {
                     payload.stripePaymentMethodId = paymentMethodId;
-                } else if (selectedMethod === 'bank') {
-                    payload.stripePaymentMethodId = 'pm_customer_balance';
                 }
+                // else if (selectedMethod === 'bank') {
+                //     payload.stripePaymentMethodId = 'pm_customer_balance';
+                // }
 
                 const donationResp = await fetch((config.baseUrl || '') + 'https://platform.alpha.trustmeup.com/api/integration/v1/donations/create-donation/', {
                     method: 'POST',
@@ -1162,7 +1163,7 @@ window.TMUPayment = (function () {
 
         async function fetchLimitedDonation(donationId, headers) {
             try {
-                const url = `https://platform.alpha.trustmeup.com/api/storefront/donation/${donationId}/limited/`;
+                const url = `https://platform.alpha.trustmeup.com/api/donations/donation/${donationId}/limited/`;
                 const resp = await fetch(url, {
                     method: 'GET',
                     headers: { 'Accept': 'application/json', ...(headers || {}) }
