@@ -72,9 +72,14 @@ export default function ShoppingCart() {
                 window.TMUPayment.open({
                     amount: total,
                     returnUrl: "/success",
+                    token: "1234567890",
                     // firstName: "Ada",
                     // lastName: "Lovelace",
                     // email: "ada@example.com",
+                    transaction_id: "1234567890",
+                    is_credit_card_visible: true,
+                    is_paypal_visible: true,
+                    is_bank_transfer_visible: true,
                     onSuccess: (result) => {
                         console.log('Payment result:', result);
                     },

@@ -1163,7 +1163,7 @@ window.TMUPayment = (function () {
 
         async function fetchLimitedDonation(donationId, headers) {
             try {
-                const url = `https://platform.alpha.trustmeup.com/api/donations/donation/${donationId}/limited/`;
+                const url = `https://platform.alpha.trustmeup.com/api/integration/v1/donations/donation/${donationId}/limited/`;
                 const resp = await fetch(url, {
                     method: 'GET',
                     headers: { 'Accept': 'application/json', ...(headers || {}) }
