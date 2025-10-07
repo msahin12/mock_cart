@@ -50,29 +50,71 @@ window.TMUPayment = (function () {
 
     function loadJsPdf() {
         return new Promise((resolve, reject) => {
-            if (window.jspdf && window.jspdf.jsPDF && window.jspdf_autoTable) {
-                return resolve({ jsPDF: window.jspdf.jsPDF, autoTable: window.jspdf_autoTable });
+            // Check if already loaded with different possible global names
+            let jsPDF = null;
+            let autoTable = null;
+
+            if (window.jspdf && window.jspdf.jsPDF) {
+                jsPDF = window.jspdf.jsPDF;
+            } else if (window.jsPDF) {
+                jsPDF = window.jsPDF;
             }
+
+            if (window.jspdf_autoTable) {
+                autoTable = window.jspdf_autoTable;
+            } else if (window.autoTable) {
+                autoTable = window.autoTable;
+            }
+
+            if (jsPDF && autoTable) {
+                return resolve({ jsPDF, autoTable });
+            }
+
             const script1 = document.createElement('script');
-            script1.src = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
+            script1.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
             script1.async = true;
             script1.onload = () => {
                 const script2 = document.createElement('script');
-                script2.src = 'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js';
+                script2.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';
                 script2.async = true;
                 script2.onload = () => {
-                    try {
-                        const jsPDF = window.jspdf.jsPDF;
-                        const autoTable = window.jspdf_autoTable;
-                        resolve({ jsPDF, autoTable });
-                    } catch (e) {
-                        reject(e);
-                    }
+                    // Give the autoTable plugin a moment to initialize
+                    setTimeout(() => {
+                        try {
+                            // Try different ways to access jsPDF
+                            let jsPDF = null;
+                            if (window.jspdf && window.jspdf.jsPDF) {
+                                jsPDF = window.jspdf.jsPDF;
+                            } else if (window.jsPDF) {
+                                jsPDF = window.jsPDF;
+                            }
+
+                            if (!jsPDF) {
+                                throw new Error('jsPDF not available after loading');
+                            }
+
+                            // Check if autoTable is available by looking for autoTableSetDefaults
+                            const hasAutoTable = jsPDF.autoTableSetDefaults !== undefined;
+
+                            if (!hasAutoTable) {
+                                throw new Error('autoTable not available after loading');
+                            }
+
+                            // autoTable is available as a method on jsPDF instances, not as a separate function
+                            resolve({ jsPDF, autoTable: null }); // We'll use doc.autoTable() directly
+                        } catch (e) {
+                            reject(e);
+                        }
+                    }, 100); // Wait 100ms for autoTable to initialize
                 };
-                script2.onerror = () => reject(new Error('Failed to load jsPDF AutoTable'));
+                script2.onerror = () => {
+                    reject(new Error('Failed to load jsPDF AutoTable'));
+                };
                 document.head.appendChild(script2);
             };
-            script1.onerror = () => reject(new Error('Failed to load jsPDF'));
+            script1.onerror = () => {
+                reject(new Error('Failed to load jsPDF'));
+            };
             document.head.appendChild(script1);
         });
     }
@@ -996,8 +1038,8 @@ window.TMUPayment = (function () {
                             const limited = await fetchLimitedDonation(donationId, config.headers || {});
                             if (limited) {
                                 donationDetails = { ...donationDetails, ...limited };
-                                if (!donationDetails.stripeRequiresActionData && limited.stripeRequiresActionData) {
-                                    donationDetails.stripeRequiresActionData = limited.stripeRequiresActionData;
+                                if (!donationDetails.stripe_requires_action_data && limited.stripe_requires_action_data) {
+                                    donationDetails.stripe_requires_action_data = limited.stripe_requires_action_data;
                                 }
                             }
                         }
@@ -1096,7 +1138,7 @@ window.TMUPayment = (function () {
 
         function showBankTransferDetails(ctx) {
             try {
-                const info = ctx.donation?.stripeRequiresActionData || {};
+                const info = ctx.donation?.stripe_requires_action_data || {};
                 const bank = info.bank_account_info || {};
                 const bic = bank.bic || '';
                 const iban = bank.iban || '';
@@ -1132,6 +1174,7 @@ window.TMUPayment = (function () {
                     downloadBtn.addEventListener('click', async () => {
                         try {
                             const { jsPDF, autoTable } = await loadJsPdf();
+
                             const doc = new jsPDF();
                             doc.setFontSize(16);
                             const title = 'Bank Transfer';
@@ -1142,7 +1185,7 @@ window.TMUPayment = (function () {
 
                             doc.setFontSize(12);
                             doc.text('Amount:', 20, 40);
-                            doc.text(String(ctx.amount), 60, 40);
+                            doc.text('€' + String(ctx.amount), 60, 40);
 
                             const tableData = [
                                 ['BIC', bic],
@@ -1151,10 +1194,22 @@ window.TMUPayment = (function () {
                                 ['Account Holder Name', accountHolderName],
                                 ['Reference', reference],
                             ];
-                            autoTable(doc, { startY: 50, body: tableData, theme: 'grid', styles: { fontSize: 10 } });
+
+                            if (doc.autoTable) {
+                                doc.autoTable({ startY: 50, body: tableData, theme: 'grid', styles: { fontSize: 10 } });
+                            } else {
+                                // Fallback: create simple text-based PDF without table
+                                let yPos = 50;
+                                tableData.forEach(([label, value]) => {
+                                    doc.text(`${label}:`, 20, yPos);
+                                    doc.text(value, 80, yPos);
+                                    yPos += 10;
+                                });
+                            }
+
                             doc.save('bank-transfer.pdf');
                         } catch (e) {
-                            alert('Impossibile generare il PDF');
+                            alert('Impossibile generare il PDF: ' + e.message);
                         }
                     });
                 }
@@ -1170,7 +1225,7 @@ window.TMUPayment = (function () {
                 });
                 if (!resp.ok) return null;
                 const json = await resp.json();
-                return json?.data?.limitedDonation || null;
+                return json || null;
             } catch (e) {
                 return null;
             }
