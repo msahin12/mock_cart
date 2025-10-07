@@ -295,7 +295,7 @@ window.TMUPayment = (function () {
             }
             
             .tmu-popup-form {
-                padding: 24px;
+                padding: 24px 16px;
                 display: flex;
                 flex-direction: column;
                 gap: 18px;
@@ -411,7 +411,7 @@ window.TMUPayment = (function () {
                 flex-direction: column;
                 gap: 20px;
                 margin-top: 8px;
-                padding: 20px;
+                padding: 20px 10px;
                 background: var(--tmu-color-light);
                 border-radius: 16px;
                 border: 1px solid rgba(11, 157, 188, 0.1);
@@ -468,7 +468,7 @@ window.TMUPayment = (function () {
                 display: flex;
                 align-items: flex-start;
                 gap: 12px;
-                padding: 16px;
+                padding: 16px 10px;
                 background: #fafafa;
                 border-radius: 12px;
                 border: 1px solid #e5e7eb;
@@ -819,19 +819,48 @@ window.TMUPayment = (function () {
         async function setupStripeIfNeeded() {
             try {
                 if (!config.stripePublicKey) return;
+
                 if (!stripe) {
                     stripe = await loadStripeJs(config.stripePublicKey);
                 }
+
                 if (!elements) {
-                    elements = stripe.elements();
+                    elements = stripe.elements({
+                        locale: 'it'
+                    });
                 }
+
+                const mountPoint = popup.querySelector('#tmu-card-element');
+                if (!mountPoint) return;
+
+                // Clear any existing content
+                mountPoint.innerHTML = '';
+
                 if (!cardElement) {
-                    const style = { base: { fontSize: '16px' } };
+                    const style = {
+                        base: {
+                            fontSize: '16px',
+                            fontFamily: 'system-ui, -apple-system, sans-serif',
+                            color: '#1f2937',
+                            '::placeholder': {
+                                color: '#9ca3af'
+                            }
+                        }
+                    };
                     cardElement = elements.create('card', { style });
-                    const mountPoint = popup.querySelector('#tmu-card-element');
-                    if (mountPoint && !mountPoint.hasChildNodes()) {
-                        cardElement.mount(mountPoint);
-                    }
+                }
+
+                // Ensure the element is properly mounted
+                if (cardElement && mountPoint) {
+                    cardElement.mount(mountPoint);
+
+                    // Add a small delay to ensure proper rendering
+                    setTimeout(() => {
+                        if (mountPoint.children.length === 0) {
+                            // Retry mounting if it failed
+                            cardElement.mount(mountPoint);
+                        }
+                    }, 100);
                 }
             } catch (e) {
                 // no-op; handled on submit
@@ -859,7 +888,10 @@ window.TMUPayment = (function () {
                 // Show/hide card fields based on selection
                 if (method.dataset.method === 'card') {
                     cardFields.classList.remove('hidden');
-                    await setupStripeIfNeeded();
+                    // Wait a bit for the DOM to update before setting up Stripe
+                    setTimeout(async () => {
+                        await setupStripeIfNeeded();
+                    }, 50);
                 } else {
                     cardFields.classList.add('hidden');
                 }
@@ -877,7 +909,10 @@ window.TMUPayment = (function () {
             }
         }
         if (defaultMethod && defaultMethod.dataset.method === 'card') {
-            setupStripeIfNeeded();
+            // Wait for DOM to be fully ready before initializing Stripe
+            setTimeout(() => {
+                setupStripeIfNeeded();
+            }, 100);
         }
 
         // Clear error message when user interacts with form
@@ -956,15 +991,27 @@ window.TMUPayment = (function () {
 
                 if (!stripe) {
                     stripe = await loadStripeJs(config.stripePublicKey);
-                    elements = stripe.elements();
+                    elements = stripe.elements({
+                        locale: 'it'
+                    });
                 }
 
                 if (selectedMethod === 'card') {
                     if (!cardElement) {
-                        const style = { base: { fontSize: '16px' } };
+                        const style = {
+                            base: {
+                                fontSize: '16px',
+                                fontFamily: 'system-ui, -apple-system, sans-serif',
+                                color: '#1f2937',
+                                '::placeholder': {
+                                    color: '#9ca3af'
+                                }
+                            }
+                        };
                         cardElement = elements.create('card', { style });
                         const mountPoint = popup.querySelector('#tmu-card-element');
-                        if (mountPoint && !mountPoint.hasChildNodes()) {
+                        if (mountPoint) {
+                            mountPoint.innerHTML = '';
                             cardElement.mount(mountPoint);
                         }
                     }
