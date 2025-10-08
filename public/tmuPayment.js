@@ -131,7 +131,7 @@ window.TMUPayment = (function () {
                 currency: options.currency || 'USD',
                 baseUrl: options.baseUrl || '',
                 stripePublicKey: options.stripePublicKey || 'pk_test_51KKIdNFmHEDbKHDRbwRM4LVISCGSNtPoOv691YhuDiXCEAi3bN3m5D9GWXCWFhTyH3MvAuM3hIanBBPTPQ20MWt600UQ0kXL2F',
-                headers: { ...(options.headers || {}), "AUTHORIZATION": "IntegrationToken eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImNiODBmZTdhLWY4YjctNGM4ZC1hYjc0LWRlNWMxMjQyZTQ4ZSIsInVzZXJfaWQiOiIyYjI0ZTIyNi1iZWVkLTQ2Y2QtOTA5MC1lZjlhYTc0YjExNWUifQ.kjkTsg-3Dsjl-wT8xYIPwdIFqPlGZakzefG-ibmAebB_k5HvxXTbGa7Iyfntl3Iu53SXaJ44feeLbxk83HhvEwOJA1FwDSwNsCJLMH0TLN2GKN3tB4kwj5e6kDpFg1FiPnX_XpAhQtLzUTY3DHZCNFEa6MNQ4roLCfPUDQKZgNhfS95HCmSWn7Ty6YPngijhP_aA58i-QDRgVQ95cXnOGY8Mf07Lwo19zG08xT37FlI7-yh1yg0x8xwwqPqbeNTfNfZdDD-wS9XSsbOaK93UX1kf211WKU9PyPfFcEhY6ZtwdfBZwMDmgXpgaaVKkwVN4FRhs1c2ppU9vGcTBtkP2wNpQR2GG1Sw44q07pT4gDgRl3j4s1EdrK_cUQtT_bMOH3vsxeciwsA8mkUDWmCEiy0Iyl1A1uKOcSF6aZiZ7SAJPwDkxgWbx1Ee0RYFsA2Bp_VI5ooKzDTMNcLXYwopUfSj7ilriXDM1LAED7KTCB1TSbiF53lUIl829ukRPNfoHvOUjdLrlcBeTjcSdAsj8rfVob0izGTMZe8K-ZP1iuKzYnwKeGuzzOew7W_PxkbFSI_QQuC4LCBI-NLIXFcgGsNHDECdIMESRI0MH33pfuP7PsQnhlLJZk5fqF2lyS4P3Q8xxa0LJzgxEqp72HCeYifSRpRUzaYnKiSPgRi_LO0" },
+                headers: { ...(options.headers || {}), "AUTHORIZATION": "IntegrationToken " + options.integrationToken },
                 returnUrl: options.returnUrl || '',
                 firstName: options.firstName || '',
                 lastName: options.lastName || '',
@@ -141,7 +141,8 @@ window.TMUPayment = (function () {
                 is_bank_transfer_visible: options.is_bank_transfer_visible !== false,
                 onSuccess: options.onSuccess || function () { },
                 onCancel: options.onCancel || function () { },
-                onError: options.onError || function (error) { alert('Errore di pagamento: ' + error); }
+                onError: options.onError || function (error) { alert('Errore di pagamento: ' + error); },
+                metadata: options.metadata || {}
             };
 
             currentPopup = createPaymentPopup(config);
@@ -1056,7 +1057,8 @@ window.TMUPayment = (function () {
                     stripePaymentMethodType: (selectedMethod === 'bank' ? 'customer_balance' : selectedMethod),
                     taxId: '',
                     vatNumber: '',
-                    note: ''
+                    note: '',
+                    metadata: config.metadata || {}
                 };
                 if (paymentMethodId) {
                     payload.stripePaymentMethodId = paymentMethodId;

@@ -72,14 +72,17 @@ export default function ShoppingCart() {
                 window.TMUPayment.open({
                     amount: total,
                     returnUrl: "/success",
-                    token: "1234567890",
-                    // firstName: "Ada",
-                    // lastName: "Lovelace",
-                    // email: "ada@example.com",
-                    transaction_id: "1234567890",
+                    integrationToken: "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImNiODBmZTdhLWY4YjctNGM4ZC1hYjc0LWRlNWMxMjQyZTQ4ZSIsInVzZXJfaWQiOiIyYjI0ZTIyNi1iZWVkLTQ2Y2QtOTA5MC1lZjlhYTc0YjExNWUifQ.kjkTsg-3Dsjl-wT8xYIPwdIFqPlGZakzefG-ibmAebB_k5HvxXTbGa7Iyfntl3Iu53SXaJ44feeLbxk83HhvEwOJA1FwDSwNsCJLMH0TLN2GKN3tB4kwj5e6kDpFg1FiPnX_XpAhQtLzUTY3DHZCNFEa6MNQ4roLCfPUDQKZgNhfS95HCmSWn7Ty6YPngijhP_aA58i-QDRgVQ95cXnOGY8Mf07Lwo19zG08xT37FlI7-yh1yg0x8xwwqPqbeNTfNfZdDD-wS9XSsbOaK93UX1kf211WKU9PyPfFcEhY6ZtwdfBZwMDmgXpgaaVKkwVN4FRhs1c2ppU9vGcTBtkP2wNpQR2GG1Sw44q07pT4gDgRl3j4s1EdrK_cUQtT_bMOH3vsxeciwsA8mkUDWmCEiy0Iyl1A1uKOcSF6aZiZ7SAJPwDkxgWbx1Ee0RYFsA2Bp_VI5ooKzDTMNcLXYwopUfSj7ilriXDM1LAED7KTCB1TSbiF53lUIl829ukRPNfoHvOUjdLrlcBeTjcSdAsj8rfVob0izGTMZe8K-ZP1iuKzYnwKeGuzzOew7W_PxkbFSI_QQuC4LCBI-NLIXFcgGsNHDECdIMESRI0MH33pfuP7PsQnhlLJZk5fqF2lyS4P3Q8xxa0LJzgxEqp72HCeYifSRpRUzaYnKiSPgRi_LO0",
+                    firstName: "",
+                    lastName: "",
+                    email: "",
                     is_credit_card_visible: true,
                     is_paypal_visible: true,
                     is_bank_transfer_visible: true,
+                    metadata: {
+                        transaction_id: '1234567890'
+                        // any other metadata you want to pass
+                    },
                     onSuccess: (result) => {
                         console.log('Payment result:', result);
                     },
